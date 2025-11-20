@@ -35,6 +35,12 @@ export interface WorkflowRunResult {
     waitingForInput: boolean;
     currentNodeId: string | null;
 }
+export interface WorkflowRunRecord {
+    runId: string;
+    workflow: WorkflowGraph;
+    logs: WorkflowLogEntry[];
+    status: WorkflowStatus;
+}
 export interface ApprovalInput {
     decision: 'approve' | 'reject';
     note?: string;

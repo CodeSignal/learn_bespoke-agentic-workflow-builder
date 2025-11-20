@@ -1,2 +1,2 @@
-import { WorkflowRunResult } from '@agentic/types';
-export declare function saveRunLog(runsDir: string, result: WorkflowRunResult): Promise<void>;
+import { WorkflowRunRecord } from '@agentic/types';
+export declare function saveRunRecord(runsDir: string, record: WorkflowRunRecord): Promise<void>;

@@ -1,9 +1,9 @@
 import type { Request, Response, Router } from 'express';
 import { Router as createRouter } from 'express';
-import { WorkflowGraph } from '@agentic/types';
+import { WorkflowGraph, WorkflowRunRecord, WorkflowRunResult } from '@agentic/types';
 import WorkflowEngine, { WorkflowLLM } from '@agentic/workflow-engine';
 import { addWorkflow, getWorkflow, removeWorkflow } from '../store/active-workflows';
-import { saveRunLog } from '../services/persistence';
+import { saveRunRecord } from '../services/persistence';
 import { config } from '../config';
 import { logger } from '../logger';
 
@@ -11,9 +11,28 @@ function validateGraph(graph: WorkflowGraph | undefined): graph is WorkflowGraph
   return Boolean(graph && Array.isArray(graph.nodes) && Array.isArray(graph.connections));
 }
 
-async function persistResult(engine: WorkflowEngine) {
+async function persistResult(engine: WorkflowEngine, result: WorkflowRunResult) {
   try {
-    await saveRunLog(config.runsDir, engine.getResult());
+    // Backward compatibility: fall back to reading the private graph field if the engine
+    // instance doesn't yet expose getGraph (e.g., cached build).
+    const engineAny = engine as WorkflowEngine & { getGraph?: () => WorkflowGraph };
+    const workflow =
+      typeof engineAny.getGraph === 'function'
+        ? engineAny.getGraph()
+        : (Reflect.get(engine, 'graph') as WorkflowGraph | undefined);
+
+    if (!workflow) {
+      throw new Error('Workflow graph not available on engine instance');
+    }
+
+    const record: WorkflowRunRecord = {
+      runId: result.runId,
+      workflow,
+      logs: result.logs,
+      status: result.status
+    };
+
+    await saveRunRecord(config.runsDir, record);
   } catch (error) {
     logger.error('Failed to persist run result', error);
   }
@@ -36,7 +55,7 @@ export function createWorkflowRouter(llm?: WorkflowLLM): Router {
       addWorkflow(engine);
 
       const result = await engine.run();
-      await persistResult(engine);
+      await persistResult(engine, result);
 
       res.json(result);
     } catch (error) {
@@ -61,7 +80,7 @@ export function createWorkflowRouter(llm?: WorkflowLLM): Router {
 
     try {
       const result = await engine.resume(input as Record<string, unknown>);
-      await persistResult(engine);
+      await persistResult(engine, result);
 
       if (result.status !== 'paused') {
         removeWorkflow(runId);

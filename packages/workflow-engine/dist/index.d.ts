@@ -33,6 +33,7 @@ export declare class WorkflowEngine {
     getRunId(): string;
     getLogs(): WorkflowLogEntry[];
     getStatus(): WorkflowStatus;
+    getGraph(): WorkflowGraph;
     getResult(): WorkflowRunResult;
     run(): Promise<WorkflowRunResult>;
     resume(input?: ApprovalInput | string | Record<string, unknown>): Promise<WorkflowRunResult>;

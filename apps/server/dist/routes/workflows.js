@@ -13,9 +13,24 @@ const logger_1 = require("../logger");
 function validateGraph(graph) {
     return Boolean(graph && Array.isArray(graph.nodes) && Array.isArray(graph.connections));
 }
-async function persistResult(engine) {
+async function persistResult(engine, result) {
     try {
-        await (0, persistence_1.saveRunLog)(config_1.config.runsDir, engine.getResult());
+        // Backward compatibility: fall back to reading the private graph field if the engine
+        // instance doesn't yet expose getGraph (e.g., cached build).
+        const engineAny = engine;
+        const workflow = typeof engineAny.getGraph === 'function'
+            ? engineAny.getGraph()
+            : Reflect.get(engine, 'graph');
+        if (!workflow) {
+            throw new Error('Workflow graph not available on engine instance');
+        }
+        const record = {
+            runId: result.runId,
+            workflow,
+            logs: result.logs,
+            status: result.status
+        };
+        await (0, persistence_1.saveRunRecord)(config_1.config.runsDir, record);
     }
     catch (error) {
         logger_1.logger.error('Failed to persist run result', error);
@@ -34,7 +49,7 @@ function createWorkflowRouter(llm) {
             const engine = new workflow_engine_1.default(graph, { runId, llm });
             (0, active_workflows_1.addWorkflow)(engine);
             const result = await engine.run();
-            await persistResult(engine);
+            await persistResult(engine, result);
             res.json(result);
         }
         catch (error) {
@@ -56,7 +71,7 @@ function createWorkflowRouter(llm) {
         }
         try {
             const result = await engine.resume(input);
-            await persistResult(engine);
+            await persistResult(engine, result);
             if (result.status !== 'paused') {
                 (0, active_workflows_1.removeWorkflow)(runId);
             }

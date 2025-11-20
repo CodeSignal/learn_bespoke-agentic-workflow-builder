@@ -74,6 +74,7 @@ async function bootstrap() {
         }
     }
     else {
+        const fsPromises = node_fs_1.default.promises;
         const { createServer: createViteServer } = await Promise.resolve().then(() => __importStar(require('vite')));
         const vite = await createViteServer({
             root: webRoot,
@@ -82,6 +83,27 @@ async function bootstrap() {
             appType: 'custom'
         });
         app.use(vite.middlewares);
+        app.use('*', async (req, res, next) => {
+            const isHtmlRequest = req.method === 'GET' &&
+                !req.originalUrl.startsWith('/api') &&
+                !req.originalUrl.includes('.') &&
+                req.headers.accept?.includes('text/html');
+            if (!isHtmlRequest) {
+                next();
+                return;
+            }
+            try {
+                const url = req.originalUrl;
+                const templatePath = node_path_1.default.join(webRoot, 'index.html');
+                let template = await fsPromises.readFile(templatePath, 'utf-8');
+                template = await vite.transformIndexHtml(url, template);
+                res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+            }
+            catch (error) {
+                vite.ssrFixStacktrace(error);
+                next(error);
+            }
+        });
         logger_1.logger.info('Vite dev middleware attached. UI available at http://localhost:%d', config_1.config.port);
     }
     app.listen(config_1.config.port, () => {

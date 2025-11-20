@@ -30,6 +30,9 @@ class WorkflowEngine {
     getStatus() {
         return this.status;
     }
+    getGraph() {
+        return this.graph;
+    }
     getResult() {
         return {
             runId: this.runId,

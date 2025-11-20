@@ -81,6 +81,10 @@ export class WorkflowEngine {
     return this.status;
   }
 
+  getGraph(): WorkflowGraph {
+    return this.graph;
+  }
+
   getResult(): WorkflowRunResult {
     return {
       runId: this.runId,
