@@ -55,7 +55,7 @@
     border-radius: var(--bespoke-radius-lg);
     box-shadow: var(--bespoke-shadow-lg);
     padding: 1rem;
-    width: 200px;
+    width: 220px;
     z-index: 5;
     backdrop-filter: blur(6px);
     border: 1px solid var(--bespoke-stroke);
@@ -219,7 +219,6 @@
     stroke: var(--bespoke-control-border);
     stroke-width: 2px;
     transition: stroke 0.2s;
-    marker-end: url(#arrowhead);
     pointer-events: none;
 }
 
@@ -288,9 +287,14 @@
     align-items: center;
 }
 
-.node-header span .material-icons,
+.node-header span .material-icons {
+    font-size: 1.5rem;
+    vertical-align: middle;
+    margin-right: 0.35rem;
+}
+
 .node-header span .material-symbols-outlined {
-    font-size: 1.1rem;
+    font-size: 1.5rem;
     vertical-align: middle;
     margin-right: 0.35rem;
 }
