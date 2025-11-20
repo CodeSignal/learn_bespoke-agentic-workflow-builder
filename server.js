@@ -15,13 +15,28 @@ const openai = new OpenAI({
 
 class WorkflowEngine {
   constructor(graph, runId) {
-    this.graph = graph;
+    this.graph = this.normalizeGraph(graph);
     this.runId = runId;
     this.state = {}; // Shared state across the workflow
     this.logs = []; // Execution trace
     this.status = 'pending'; // pending, running, paused, completed, failed
     this.currentNodeId = null;
     this.waitingForInput = false;
+  }
+
+  normalizeGraph(graph = {}) {
+    const nodes = Array.isArray(graph.nodes)
+      ? graph.nodes.map(node => {
+          if (node?.type === 'input') {
+            return { ...node, type: 'approval' };
+          }
+          return node;
+        })
+      : [];
+    return {
+      nodes,
+      connections: Array.isArray(graph.connections) ? graph.connections : []
+    };
   }
 
   log(nodeId, type, content) {
@@ -43,7 +58,7 @@ class WorkflowEngine {
     }
     const labels = {
       start: 'start node',
-      input: 'human input node',
+      approval: 'user approval node',
       if: 'condition node',
       end: 'end node'
     };
@@ -98,6 +113,15 @@ class WorkflowEngine {
           if (nextNode) await this.processNode(nextNode);
           return; 
 
+        case 'approval':
+          // Store the current output before approval so we can restore it after approval
+          // Approval decisions are workflow-only and should never reach the LLM
+          this.state.pre_approval_output = this.state.last_output;
+          this.status = 'paused';
+          this.waitingForInput = true;
+          this.log(node.id, 'wait_input', 'Waiting for user approval');
+          return; 
+
         case 'input':
           this.status = 'paused';
           this.waitingForInput = true;
@@ -139,7 +163,27 @@ class WorkflowEngine {
   async executeAgentNode(node) {
     const previousOutput = this.state.last_output;
     let priorText = '';
-    if (typeof previousOutput === 'string') {
+    // Safeguard: Never send approval decisions to LLM
+    // Check if this looks like an approval decision object and filter it out
+    if (previousOutput && typeof previousOutput === 'object' && 
+        ('decision' in previousOutput || 'note' in previousOutput)) {
+      // This is approval data - should never happen, but filter it out
+      // Look for the last actual node output in state (from start or previous agent)
+      let safeOutput = null;
+      // Check all state keys to find the last non-approval output
+      const stateKeys = Object.keys(this.state).filter(k => 
+        !k.includes('_approval') && k !== 'last_output' && k !== 'pre_approval_output'
+      );
+      // Get outputs from nodes (they're stored by node ID)
+      for (const key of stateKeys.reverse()) {
+        const value = this.state[key];
+        if (value && typeof value === 'string' && !value.includes('approved') && !value.includes('rejected')) {
+          safeOutput = value;
+          break;
+        }
+      }
+      priorText = safeOutput || '';
+    } else if (typeof previousOutput === 'string') {
       priorText = previousOutput;
     } else if (previousOutput !== undefined && previousOutput !== null) {
       priorText = JSON.stringify(previousOutput);
@@ -219,20 +263,71 @@ class WorkflowEngine {
   async resume(inputData) {
       if (this.status !== 'paused') return;
       
-      this.log(this.currentNodeId, 'input_received', inputData);
+      const currentNode = this.graph.nodes.find(n => n.id === this.currentNodeId);
+      this.waitingForInput = false;
       this.status = 'running';
-      this.state.last_output = inputData; // Input becomes the new context
+
+      let connection = null;
+
+      if (currentNode?.type === 'approval') {
+          const { decision, note } = this.normalizeApprovalInput(inputData);
+          const logMessage = this.buildApprovalLog(decision, note);
+          this.log(this.currentNodeId, 'input_received', logMessage);
+          // Store approval decision separately for logging only
+          // Approval decisions are workflow-only and should never reach the LLM
+          this.state[`${this.currentNodeId}_approval`] = { decision, note };
+          // Restore the output from before approval - ensure it's a string, not an object
+          // This ensures agents only see the previous node's output (start or agent), never approval data
+          const restoredOutput = this.state.pre_approval_output;
+          if (restoredOutput !== undefined && restoredOutput !== null) {
+              // Ensure we restore as string if it was a string, otherwise convert
+              this.state.last_output = typeof restoredOutput === 'string' 
+                  ? restoredOutput 
+                  : (typeof restoredOutput === 'object' ? JSON.stringify(restoredOutput) : String(restoredOutput));
+          }
+          // If pre_approval_output wasn't set, keep last_output as-is (shouldn't happen, but safe fallback)
+          delete this.state.pre_approval_output;
+          connection = this.graph.connections.find(c => c.source === this.currentNodeId && c.sourceHandle === decision);
+      } else {
+          this.log(this.currentNodeId, 'input_received', inputData);
+          this.state.last_output = inputData;
+          connection = this.graph.connections.find(c => c.source === this.currentNodeId);
+      }
       
-      // Find next node from current Input node
-      const connection = this.graph.connections.find(c => c.source === this.currentNodeId);
       if (connection) {
           const nextNode = this.graph.nodes.find(n => n.id === connection.target);
-          await this.processNode(nextNode);
+          if (nextNode) {
+              await this.processNode(nextNode);
+          } else {
+              this.status = 'completed';
+          }
       } else {
           this.status = 'completed';
       }
       
       return this.getResult();
+  }
+
+  normalizeApprovalInput(inputData) {
+      if (typeof inputData === 'object' && inputData !== null) {
+          const decision = inputData.decision === 'reject' ? 'reject' : 'approve';
+          const note = inputData.note ? String(inputData.note) : '';
+          return { decision, note };
+      }
+      if (typeof inputData === 'string') {
+          const normalized = inputData.toLowerCase().includes('reject') ? 'reject' : 'approve';
+          return { decision: normalized, note: '' };
+      }
+      return { decision: 'approve', note: '' };
+  }
+
+  buildApprovalLog(decision, note) {
+      let text = decision === 'approve' ? 'User approved this step.' : 'User rejected this step.';
+      const trimmed = (note || '').trim();
+      if (trimmed) {
+          text += ` Feedback: ${trimmed}`;
+      }
+      return text;
   }
 
   getResult() {
@@ -241,7 +336,8 @@ class WorkflowEngine {
           status: this.status,
           logs: this.logs,
           state: this.state,
-          waitingForInput: this.waitingForInput
+          waitingForInput: this.waitingForInput,
+          currentNodeId: this.currentNodeId
       };
   }
 }

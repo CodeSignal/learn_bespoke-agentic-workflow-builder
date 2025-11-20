@@ -1,6 +1,6 @@
 # Agentic Workflow Builder
 
-Agentic Workflow Builder is a Bespoke-styled web app for visually composing, running, and auditing agentic LLM workflows. It features a draggable canvas for nodes (Start, Agent, If/Else, Human Input, End), a floating palette, resizable run console, and a status-aware chat log that highlights user prompts and agent replies.
+Agentic Workflow Builder is a Bespoke-styled web app for visually composing, running, and auditing agentic LLM workflows. It features a draggable canvas for nodes (Start, Agent, If/Else, User Approval, End), a floating palette, resizable run console, and a status-aware chat log that highlights user prompts and agent replies.
 
 ## Features
 
@@ -39,7 +39,7 @@ AGENTS.md, template-README.md, etc.
 
 ## Usage Notes
 
-- **Floating Palette**: Drag entries (Start, Agent, If/Else, Human Input, End) from the top-left floating palette onto the canvas.
+- **Floating Palette**: Drag entries (Start, Agent, If/Else, User Approval, End) from the top-left floating palette onto the canvas.
 - **Node Editing**: Click the gear icon to expand node settings (agent name, prompts, model, reasoning effort, tools). Delete nodes via the trash icon.
 - **Zoom & Pan**: Use the zoom-out/in controls (top-right) or drag the canvas to pan. A “Clear Canvas” button sits in the bottom-left.
 - **Run Console**: Resize the right panel by dragging the vertical handle. Enter an initial prompt, click **Run Workflow**, and watch the chat log stream user/agent turns.

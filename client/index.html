@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="./bespoke.css" />
     <link rel="stylesheet" href="./workflow-editor.css" />
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   </head>
   <body class="bespoke">
     <header class="header">
@@ -23,10 +24,9 @@
         <div class="palette-floating">
           <h3>Nodes</h3>
           <div class="node-palette">
-              <div class="draggable-node" draggable="true" data-type="start"><span class="material-icons">play_circle</span>Start</div>
-              <div class="draggable-node" draggable="true" data-type="agent"><span class="material-icons">smart_toy</span>Agent</div>
+              <div class="draggable-node" draggable="true" data-type="agent"><span class="material-symbols-outlined">network_intelligence</span>Agent</div>
               <div class="draggable-node" draggable="true" data-type="if"><span class="material-icons">call_split</span>If / Else</div>
-              <div class="draggable-node" draggable="true" data-type="input"><span class="material-icons">person</span>Human Input</div>
+              <div class="draggable-node" draggable="true" data-type="approval"><span class="material-symbols-outlined">thumbs_up_down</span>User Approval</div>
               <div class="draggable-node" draggable="true" data-type="end"><span class="material-icons">flag</span>End</div>
           </div>
         </div>
@@ -69,19 +69,19 @@
       </aside>
     </main>
 
-    <!-- Human Input Modal -->
-    <div class="modal" id="input-modal" style="display: none;">
+    <!-- Confirmation Modal -->
+    <div class="modal confirm-modal" id="confirm-modal" style="display: none;">
         <div class="modal-backdrop"></div>
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Human Input Required</h2>
+                <h2 id="confirm-modal-title">Confirm Action</h2>
             </div>
             <div class="modal-body">
-                <p id="input-prompt-text">The workflow requires your input:</p>
-                <textarea id="human-input-value" rows="4" placeholder="Type your response here..."></textarea>
+                <p id="confirm-modal-message">Are you sure you want to continue?</p>
             </div>
-            <div class="modal-footer" style="padding: 1rem; display: flex; justify-content: flex-end;">
-                <button id="btn-submit-input" class="primary">Submit</button>
+            <div class="modal-footer" style="padding: 1rem; display: flex; justify-content: flex-end; gap: 0.5rem;">
+                <button id="confirm-modal-cancel" class="ghost">Cancel</button>
+                <button id="confirm-modal-confirm" class="primary">Confirm</button>
             </div>
         </div>
     </div>

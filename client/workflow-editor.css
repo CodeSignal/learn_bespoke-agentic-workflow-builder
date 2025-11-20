@@ -261,7 +261,8 @@
     align-items: center;
 }
 
-.node-header span .material-icons {
+.node-header span .material-icons,
+.node-header span .material-symbols-outlined {
     font-size: 1.1rem;
     vertical-align: middle;
     margin-right: 0.35rem;
@@ -519,6 +520,108 @@
     color: var(--bespoke-danger);
 }
 
+.chat-message.approval-request {
+    align-self: flex-end;
+    border: 1px solid var(--bespoke-stroke);
+    background: var(--bespoke-box);
+    color: var(--bespoke-fg);
+}
+
+.approval-text {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.approval-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.approval-actions button {
+    min-width: 60px;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.85rem;
+}
+
+.approval-actions button.approve-btn {
+    background: #16a34a;
+    color: #fff;
+    border-color: #16a34a;
+}
+
+.approval-actions button.approve-btn:hover {
+    background: #15803d;
+    border-color: #15803d;
+}
+
+.approval-actions button.reject-btn {
+    background: var(--bespoke-danger);
+    color: #fff;
+    border-color: var(--bespoke-danger);
+}
+
+.approval-actions button.reject-btn:hover {
+    background: #b91c1c;
+    border-color: #b91c1c;
+}
+
+.chat-message.approval-result {
+    align-self: center;
+    max-width: 400px;
+    border-radius: var(--bespoke-radius-lg);
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.chat-message.approval-result.approved {
+    background: rgba(22, 163, 74, 0.1);
+    border: 1px solid rgba(22, 163, 74, 0.3);
+    color: #16a34a;
+}
+
+.chat-message.approval-result.rejected {
+    background: rgba(220, 38, 38, 0.1);
+    border: 1px solid rgba(220, 38, 38, 0.3);
+    color: var(--bespoke-danger);
+}
+
+.approval-result-content {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.approval-result-icon {
+    font-size: 1.2rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.approval-result-text {
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.85rem;
+}
+
+.approval-result-note {
+    width: 100%;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid currentColor;
+    opacity: 0.7;
+    font-size: 0.85rem;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: normal;
+}
+
 .chat-input {
     margin-top: 1rem;
     display: flex;
@@ -550,4 +653,28 @@
     font-size: 0.9rem;
     background: var(--bespoke-bg);
     color: var(--bespoke-fg);
+}
+
+/* Confirmation Modal Adjustments */
+.bespoke #confirm-modal .modal-content {
+    max-width: 420px;
+    width: min(420px, calc(100% - 2rem));
+}
+
+.bespoke #confirm-modal .modal-header,
+.bespoke #confirm-modal .modal-body,
+.bespoke #confirm-modal .modal-footer {
+    padding: var(--bespoke-space-lg);
+}
+
+.bespoke #confirm-modal .modal-body {
+    font-size: var(--bespoke-font-size-base);
+    color: var(--bespoke-fg);
+}
+
+.bespoke #confirm-modal .modal-footer {
+    border-top: 1px solid var(--bespoke-stroke);
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--bespoke-space-sm);
 }

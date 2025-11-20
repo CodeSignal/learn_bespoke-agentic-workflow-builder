@@ -39,6 +39,13 @@ class WorkflowEditor {
         this.rightResizer = document.getElementById('right-resizer');
         this.pendingAgentMessage = null;
         this.currentPrompt = '';
+        this.pendingApprovalRequest = null;
+        this.confirmModal = document.getElementById('confirm-modal');
+        this.confirmTitle = document.getElementById('confirm-modal-title');
+        this.confirmMessage = document.getElementById('confirm-modal-message');
+        this.confirmConfirmBtn = document.getElementById('confirm-modal-confirm');
+        this.confirmCancelBtn = document.getElementById('confirm-modal-cancel');
+        this.confirmBackdrop = this.confirmModal ? this.confirmModal.querySelector('.modal-backdrop') : null;
 
         // Bindings
         this.initDragAndDrop();
@@ -52,6 +59,8 @@ class WorkflowEditor {
         this.applyViewport();
         this.setStatus('Idle');
         this.setRunState(false);
+        this.addDefaultStartNode();
+        this.upgradeLegacyNodes(true);
     }
 
     applyViewport() {
@@ -254,20 +263,31 @@ class WorkflowEditor {
 
     initButtons() {
         document.getElementById('btn-run').addEventListener('click', () => this.runWorkflow());
-        document.getElementById('btn-clear').addEventListener('click', () => {
-            if(confirm('Clear canvas?')) {
-                this.nodes = [];
-                this.connections = [];
-                this.render();
-                this.currentPrompt = '';
-                if (this.chatMessages) {
-                    this.chatMessages.innerHTML = '<div class="chat-message system">Canvas cleared. Start building your next workflow.</div>';
-                }
-                this.setStatus('Idle');
+        document.getElementById('btn-clear').addEventListener('click', async () => {
+            const confirmed = await this.openConfirmModal({
+                title: 'Clear Canvas',
+                message: 'Remove all nodes and connections from the canvas?',
+                confirmLabel: 'Clear',
+                cancelLabel: 'Keep'
+            });
+            if(!confirmed) return;
+            this.nodes = [];
+            this.connections = [];
+            this.render();
+            this.addDefaultStartNode();
+            this.currentPrompt = '';
+            if (this.chatMessages) {
+                this.chatMessages.innerHTML = '<div class="chat-message system">Canvas cleared. Start building your next workflow.</div>';
             }
+            this.setStatus('Idle');
         });
         
-        document.getElementById('btn-submit-input').addEventListener('click', () => this.submitHumanInput());
+        if (this.approveBtn) {
+            this.approveBtn.addEventListener('click', () => this.submitApprovalDecision('approve'));
+        }
+        if (this.rejectBtn) {
+            this.rejectBtn.addEventListener('click', () => this.submitApprovalDecision('reject'));
+        }
 
         const zoomInBtn = document.getElementById('btn-zoom-in');
         const zoomOutBtn = document.getElementById('btn-zoom-out');
@@ -313,18 +333,104 @@ class WorkflowEditor {
         };
     }
 
+    openConfirmModal(options = {}) {
+        const {
+            title = 'Confirm',
+            message = 'Are you sure?',
+            confirmLabel = 'Confirm',
+            cancelLabel = 'Cancel'
+        } = options;
+
+        if (!this.confirmModal || !this.confirmConfirmBtn || !this.confirmCancelBtn) {
+            return Promise.resolve(window.confirm(message));
+        }
+
+        if (this.confirmTitle) this.confirmTitle.textContent = title;
+        if (this.confirmMessage) this.confirmMessage.textContent = message;
+        this.confirmConfirmBtn.textContent = confirmLabel;
+        this.confirmCancelBtn.textContent = cancelLabel;
+
+        return new Promise((resolve) => {
+            const cleanup = () => {
+                this.confirmModal.style.display = 'none';
+                this.confirmConfirmBtn.removeEventListener('click', onConfirm);
+                this.confirmCancelBtn.removeEventListener('click', onCancel);
+                if (this.confirmBackdrop) {
+                    this.confirmBackdrop.removeEventListener('click', onCancel);
+                }
+                document.removeEventListener('keydown', onKeydown);
+            };
+
+            const onConfirm = () => {
+                cleanup();
+                resolve(true);
+            };
+
+            const onCancel = () => {
+                cleanup();
+                resolve(false);
+            };
+
+            const onKeydown = (event) => {
+                if (event.key === 'Escape') onCancel();
+            };
+
+            this.confirmModal.style.display = 'flex';
+            document.addEventListener('keydown', onKeydown);
+            this.confirmConfirmBtn.addEventListener('click', onConfirm);
+            this.confirmCancelBtn.addEventListener('click', onCancel);
+            if (this.confirmBackdrop) {
+                this.confirmBackdrop.addEventListener('click', onCancel);
+            }
+        });
+    }
+
     // --- NODE MANAGEMENT ---
 
     addNode(type, x, y) {
+        const normalizedType = type === 'input' ? 'approval' : type;
         const node = {
             id: `node_${this.nextNodeId++}`,
-            type,
+            type: normalizedType,
             x,
             y,
-            data: this.getDefaultData(type)
+            data: this.getDefaultData(normalizedType)
         };
         this.nodes.push(node);
         this.renderNode(node);
+    }
+
+    upgradeLegacyNodes(shouldRender = false) {
+        let updated = false;
+        this.nodes.forEach(node => {
+            if (node.type === 'input') {
+                node.type = 'approval';
+                if (node.data && node.data.prompt === undefined) {
+                    node.data.prompt = 'Review and approve this step.';
+                }
+                updated = true;
+            }
+        });
+        if (updated && shouldRender) {
+            this.render();
+        }
+    }
+
+    addDefaultStartNode() {
+        const startExists = this.nodes.some(n => n.type === 'start');
+        if (startExists) return;
+        const { x, y } = this.getDefaultStartPosition();
+        this.addNode('start', x, y);
+    }
+
+    getDefaultStartPosition() {
+        const container = this.canvasStage || this.canvas;
+        const fallback = { x: 160, y: 160 };
+        if (!container) return fallback;
+        const rect = container.getBoundingClientRect();
+        const x = rect.width ? Math.max(60, rect.width * 0.2) : fallback.x;
+        const y = rect.height ? Math.max(60, rect.height * 0.3) : fallback.y;
+        return { x, y };
     }
 
     getDefaultData(type) {
@@ -341,14 +447,19 @@ class WorkflowEditor {
                 };
             case 'if': 
                 return { condition: '', collapsed: true };
-            case 'input': 
-                return { prompt: 'Please provide input:', collapsed: true };
+            case 'approval': 
+                return { prompt: 'Review and approve this step.', collapsed: true };
             case 'start':
             case 'end':
                 return { collapsed: true };
             default: 
                 return { collapsed: true };
         }
+    }
+
+    nodeHasSettings(node) {
+        if (!node) return false;
+        return ['agent', 'if', 'approval'].includes(node.type);
     }
 
     deleteNode(id) {
@@ -378,6 +489,7 @@ class WorkflowEditor {
         if (node.data.collapsed === undefined) {
             node.data.collapsed = node.type === 'start' || node.type === 'end';
         }
+        const hasSettings = this.nodeHasSettings(node);
         el.classList.toggle('expanded', !node.data.collapsed);
         
         // Header
@@ -393,36 +505,51 @@ class WorkflowEditor {
         const controls = document.createElement('div');
         controls.className = 'node-controls';
 
-        const collapseBtn = document.createElement('button');
-        collapseBtn.className = 'icon-btn collapse';
-        collapseBtn.innerHTML = '<span class="material-icons">tune</span>';
-        const updateCollapseIcon = () => {
-            collapseBtn.title = node.data.collapsed ? 'Open settings' : 'Close settings';
-            el.classList.toggle('expanded', !node.data.collapsed);
-        };
-        updateCollapseIcon();
-        collapseBtn.addEventListener('mousedown', (e) => {
-            e.stopPropagation();
-            node.data.collapsed = !node.data.collapsed;
+        let collapseBtn = null;
+        let updateCollapseIcon = () => {};
+        if (hasSettings) {
+            collapseBtn = document.createElement('button');
+            collapseBtn.className = 'icon-btn collapse';
+            collapseBtn.innerHTML = '<span class="material-icons">tune</span>';
+            updateCollapseIcon = () => {
+                collapseBtn.title = node.data.collapsed ? 'Open settings' : 'Close settings';
+                el.classList.toggle('expanded', !node.data.collapsed);
+            };
             updateCollapseIcon();
-            this.renderConnections();
-        });
-        controls.appendChild(collapseBtn);
+            collapseBtn.addEventListener('mousedown', (e) => {
+                e.stopPropagation();
+                node.data.collapsed = !node.data.collapsed;
+                updateCollapseIcon();
+                this.renderConnections();
+            });
+            controls.appendChild(collapseBtn);
+        }
         
-        const delBtn = document.createElement('button');
-        delBtn.className = 'icon-btn delete';
-        delBtn.innerHTML = '<span class="material-icons">delete</span>';
-        delBtn.title = 'Delete Node';
-        delBtn.addEventListener('mousedown', (e) => {
-             e.stopPropagation(); 
-             if(confirm('Delete node?')) this.deleteNode(node.id);
-        });
-        controls.appendChild(delBtn);
+        let delBtn = null;
+        if (node.type !== 'start') {
+            delBtn = document.createElement('button');
+            delBtn.className = 'icon-btn delete';
+            delBtn.innerHTML = '<span class="material-icons">delete</span>';
+            delBtn.title = 'Delete Node';
+            delBtn.addEventListener('mousedown', async (e) => {
+                 e.stopPropagation(); 
+                 const confirmed = await this.openConfirmModal({
+                    title: 'Delete Node',
+                    message: 'Delete this node and its connections?',
+                    confirmLabel: 'Delete',
+                    cancelLabel: 'Cancel'
+                 });
+                 if(confirmed) this.deleteNode(node.id);
+            });
+            controls.appendChild(delBtn);
+        }
         header.appendChild(controls);
 
         // Drag Handler
         header.addEventListener('mousedown', (e) => {
-            if (e.target === collapseBtn || e.target === delBtn) return;
+            const interactingWithCollapse = collapseBtn && collapseBtn.contains(e.target);
+            const interactingWithDelete = delBtn && delBtn.contains(e.target);
+            if (interactingWithCollapse || interactingWithDelete) return;
             
             e.stopPropagation();
             this.selectNode(node.id);
@@ -435,6 +562,7 @@ class WorkflowEditor {
         });
 
         header.addEventListener('dblclick', (e) => {
+            if (!hasSettings) return;
             e.stopPropagation();
             node.data.collapsed = !node.data.collapsed;
             updateCollapseIcon();
@@ -481,12 +609,12 @@ class WorkflowEditor {
     getNodeLabel(node) {
         if (node.type === 'agent') {
             const name = (node.data.agentName || 'Agent').trim() || 'Agent';
-            return `<span class="material-icons">smart_toy</span>${name}`;
+            return `<span class="material-symbols-outlined">network_intelligence</span>${name}`;
         }
         if (node.type === 'start') return '<span class="material-icons">play_circle</span>Start';
         if (node.type === 'end') return '<span class="material-icons">flag</span>End';
         if (node.type === 'if') return '<span class="material-icons">call_split</span>If/Else';
-        if (node.type === 'input') return '<span class="material-icons">person</span>Input';
+        if (node.type === 'approval') return '<span class="material-symbols-outlined">thumbs_up_down</span>User Approval';
         return node.type;
     }
 
@@ -497,7 +625,7 @@ class WorkflowEditor {
             return `${name} • ${model}`;
         }
         if (node.type === 'if') return `Condition: ${node.data.condition || '...'} `;
-        if (node.type === 'input') return node.data.prompt || 'Prompt required';
+        if (node.type === 'approval') return node.data.prompt || 'Approval message required';
         if (node.type === 'start') return 'Uses Initial Prompt';
         return 'Configure this node';
     }
@@ -605,11 +733,12 @@ class WorkflowEditor {
             });
             container.appendChild(condInput);
 
-        } else if (node.type === 'input') {
-            container.appendChild(buildLabel('Input Prompt'));
+        } else if (node.type === 'approval') {
+            container.appendChild(buildLabel('Approval Message'));
             const pInput = document.createElement('input');
             pInput.type = 'text';
             pInput.value = node.data.prompt || '';
+            pInput.placeholder = 'Message shown to user when approval is required';
             pInput.addEventListener('input', (e) => {
                 node.data.prompt = e.target.value;
             });
@@ -639,6 +768,9 @@ class WorkflowEditor {
             if (node.type === 'if') {
                 el.appendChild(this.createPort(node.id, 'true', 'port-out port-true', 'True'));
                 el.appendChild(this.createPort(node.id, 'false', 'port-out port-false', 'False'));
+            } else if (node.type === 'approval') {
+                el.appendChild(this.createPort(node.id, 'approve', 'port-out port-true', 'Approve'));
+                el.appendChild(this.createPort(node.id, 'reject', 'port-out port-false', 'Reject'));
             } else {
                 el.appendChild(this.createPort(node.id, 'output', 'port-out'));
             }
@@ -711,8 +843,8 @@ class WorkflowEditor {
             if (!sourceNode || !targetNode) return;
 
             let startYOffset = 24; // center of port
-            if (conn.sourceHandle === 'true') startYOffset = 51;
-            if (conn.sourceHandle === 'false') startYOffset = 81;
+            if (conn.sourceHandle === 'true' || conn.sourceHandle === 'approve') startYOffset = 51;
+            if (conn.sourceHandle === 'false' || conn.sourceHandle === 'reject') startYOffset = 81;
             if (conn.sourceHandle === 'output' && sourceNode.type === 'agent') startYOffset = 24;
 
             // Calculate start/end points based on node position + standard port offsets
@@ -731,6 +863,109 @@ class WorkflowEditor {
     getPathD(startX, startY, endX, endY) {
         const controlPointOffset = Math.abs(endX - startX) * 0.5;
         return `M ${startX} ${startY} C ${startX + controlPointOffset} ${startY}, ${endX - controlPointOffset} ${endY}, ${endX} ${endY}`;
+    }
+
+    formatApprovalMessage(decision, note) {
+        const base = decision === 'approve' ? 'User approved this step.' : 'User rejected this step.';
+        const trimmedNote = (note || '').trim();
+        return trimmedNote ? `${base} Feedback: ${trimmedNote}` : base;
+    }
+
+    replaceApprovalWithResult(decision, note) {
+        if (!this.pendingApprovalRequest?.container) return;
+        
+        const container = this.pendingApprovalRequest.container;
+        container.className = 'chat-message approval-result';
+        container.classList.add(decision === 'approve' ? 'approved' : 'rejected');
+        
+        const trimmedNote = (note || '').trim();
+        const icon = decision === 'approve' ? '✓' : '✗';
+        const text = decision === 'approve' ? 'Approved' : 'Rejected';
+        
+        container.innerHTML = '';
+        
+        const content = document.createElement('div');
+        content.className = 'approval-result-content';
+        
+        const iconEl = document.createElement('span');
+        iconEl.className = 'approval-result-icon';
+        iconEl.textContent = icon;
+        content.appendChild(iconEl);
+        
+        const textEl = document.createElement('span');
+        textEl.className = 'approval-result-text';
+        textEl.textContent = text;
+        content.appendChild(textEl);
+        
+        if (trimmedNote) {
+            const noteEl = document.createElement('div');
+            noteEl.className = 'approval-result-note';
+            noteEl.textContent = trimmedNote;
+            content.appendChild(noteEl);
+        }
+        
+        container.appendChild(content);
+        this.pendingApprovalRequest = null;
+    }
+
+    showApprovalMessage(nodeId) {
+        if (!this.chatMessages) return;
+        this.clearApprovalMessage();
+        const node = this.nodes.find(n => n.id === nodeId);
+        const messageText = node?.data?.prompt || 'Approval required before continuing.';
+
+        const message = document.createElement('div');
+        message.className = 'chat-message approval-request';
+
+        const textEl = document.createElement('div');
+        textEl.className = 'approval-text';
+        textEl.textContent = messageText;
+        message.appendChild(textEl);
+
+        const actions = document.createElement('div');
+        actions.className = 'approval-actions';
+
+        const rejectBtn = document.createElement('button');
+        rejectBtn.className = 'reject-btn';
+        rejectBtn.textContent = 'Reject';
+
+        const approveBtn = document.createElement('button');
+        approveBtn.className = 'approve-btn';
+        approveBtn.textContent = 'Approve';
+
+        rejectBtn.addEventListener('click', () => this.submitApprovalDecision('reject'));
+        approveBtn.addEventListener('click', () => this.submitApprovalDecision('approve'));
+
+        actions.appendChild(rejectBtn);
+        actions.appendChild(approveBtn);
+        message.appendChild(actions);
+
+        this.chatMessages.appendChild(message);
+        this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+        this.pendingApprovalRequest = { nodeId, container: message, approveBtn, rejectBtn };
+    }
+
+    clearApprovalMessage() {
+        if (this.pendingApprovalRequest?.container) {
+            this.pendingApprovalRequest.container.remove();
+        }
+        this.pendingApprovalRequest = null;
+    }
+
+    setApprovalButtonsDisabled(disabled) {
+        if (!this.pendingApprovalRequest) return;
+        this.pendingApprovalRequest.approveBtn.disabled = disabled;
+        this.pendingApprovalRequest.rejectBtn.disabled = disabled;
+    }
+
+    extractWaitingNodeId(logs = []) {
+        if (!Array.isArray(logs)) return null;
+        for (let i = logs.length - 1; i >= 0; i -= 1) {
+            if (logs[i].type === 'wait_input') {
+                return logs[i].nodeId;
+            }
+        }
+        return null;
     }
 
     selectNode(id) {
@@ -783,9 +1018,6 @@ class WorkflowEditor {
     renderChatFromLogs(logs = []) {
         if (!this.chatMessages) return;
         this.chatMessages.innerHTML = '';
-        if (this.currentPrompt && this.currentPrompt.trim().length > 0) {
-            this.appendChatMessage(this.currentPrompt.trim(), 'user');
-        }
         let agentMessageShown = false;
         logs.forEach(entry => {
             const role = this.mapLogEntryToRole(entry);
@@ -804,6 +1036,7 @@ class WorkflowEditor {
     }
 
     async runWorkflow() {
+        this.upgradeLegacyNodes();
         const startNode = this.nodes.find(n => n.type === 'start');
         if (!startNode) {
             alert('Add a Start node and connect your workflow before running.');
@@ -850,13 +1083,16 @@ class WorkflowEditor {
 
         if (result.status === 'paused' && result.waitingForInput) {
             this.currentRunId = result.runId;
-            document.getElementById('input-modal').style.display = 'block';
-            this.setStatus('Waiting for input');
+            const pausedNodeId = result.currentNodeId || this.extractWaitingNodeId(result.logs);
+            this.showApprovalMessage(pausedNodeId);
+            this.setStatus('Waiting for approval');
         } else if (result.status === 'completed') {
+            this.clearApprovalMessage();
             this.setStatus('Completed');
             this.hideAgentSpinner();
             this.setRunState(false);
   } else {
+            this.clearApprovalMessage();
             this.setStatus(result.status || 'Idle');
             if (result.status !== 'paused') {
                 this.hideAgentSpinner();
@@ -865,10 +1101,12 @@ class WorkflowEditor {
         }
     }
 
-    async submitHumanInput() {
-        const val = document.getElementById('human-input-value').value;
-        document.getElementById('input-modal').style.display = 'none';
-        this.logManualUserMessage(val);
+    async submitApprovalDecision(decision) {
+        if (!this.currentRunId) return;
+        this.setApprovalButtonsDisabled(true);
+        const note = '';
+        this.replaceApprovalWithResult(decision, note);
+        this.setStatus('Running');
         this.showAgentSpinner();
         
         try {
@@ -877,7 +1115,7 @@ class WorkflowEditor {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     runId: this.currentRunId,
-                    input: val 
+                    input: { decision, note }
                 })
             });
             const result = await res.json();
