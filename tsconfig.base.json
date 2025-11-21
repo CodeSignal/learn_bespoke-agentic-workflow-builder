@@ -21,7 +21,8 @@
       "@agentic/workflow-engine": [
         "./packages/workflow-engine/src"
       ]
-    }
+    },
+    "declarationMap": true
   }
 }
 

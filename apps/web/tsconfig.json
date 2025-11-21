@@ -19,7 +19,9 @@
       "@agentic/types": [
         "../../packages/types/src"
       ]
-    }
+    },
+    "declaration": false,
+    "declarationMap": false
   },
   "include": [
     "src"
