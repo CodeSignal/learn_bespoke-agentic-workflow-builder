@@ -4,8 +4,8 @@
 import type { WorkflowGraph } from '@agentic/types';
 import { runWorkflow, resumeWorkflow } from '../services/api';
 
-const COLLAPSED_NODE_WIDTH = 240;
 const EXPANDED_NODE_WIDTH = 420;
+const DEFAULT_NODE_WIDTH = 150; // Fallback if DOM not ready
 const MODEL_OPTIONS = ['gpt-5', 'gpt-5-mini', 'gpt-5.1'];
 const MODEL_EFFORTS = {
     'gpt-5': ['low', 'medium', 'high'],
@@ -38,8 +38,8 @@ export class WorkflowEditor {
         this.connectionsLayer = document.getElementById('connections-layer');
         this.chatMessages = document.getElementById('chat-messages');
         this.initialPrompt = document.getElementById('initial-prompt');
-        this.chatStatusEl = document.getElementById('chat-status');
         this.runButton = document.getElementById('btn-run');
+        this.workflowState = 'idle'; // 'idle' | 'running' | 'paused'
         this.rightPanel = document.getElementById('right-panel');
         this.rightResizer = document.getElementById('right-resizer');
         this.pendingAgentMessage = null;
@@ -62,8 +62,7 @@ export class WorkflowEditor {
         this.initWebSocket();
 
         this.applyViewport();
-        this.setStatus('Idle');
-        this.setRunState(false);
+        this.updateRunButton();
         this.addDefaultStartNode();
         this.upgradeLegacyNodes(true);
 
@@ -115,21 +114,54 @@ export class WorkflowEditor {
     }
 
     getNodeWidth(node) {
-        if (!node || !node.data) return COLLAPSED_NODE_WIDTH;
-        return node.data.collapsed ? COLLAPSED_NODE_WIDTH : EXPANDED_NODE_WIDTH;
+        if (!node) return DEFAULT_NODE_WIDTH;
+        
+        // If expanded, use fixed expanded width
+        if (node.data && !node.data.collapsed) {
+            return EXPANDED_NODE_WIDTH;
+        }
+        
+        // Try to get actual width from DOM
+        const el = document.getElementById(node.id);
+        if (el) {
+            return el.offsetWidth || DEFAULT_NODE_WIDTH;
+        }
+        
+        return DEFAULT_NODE_WIDTH;
     }
 
-    setStatus(text) {
-        if (this.chatStatusEl) {
-            this.chatStatusEl.innerText = text;
+    setWorkflowState(state) {
+        this.workflowState = state;
+        this.updateRunButton();
+    }
+
+    updateRunButton() {
+        if (!this.runButton) return;
+        
+        switch (this.workflowState) {
+            case 'running':
+                this.runButton.textContent = 'Running...';
+                this.runButton.disabled = true;
+                break;
+            case 'paused':
+                this.runButton.textContent = 'Paused';
+                this.runButton.disabled = true;
+                break;
+            case 'idle':
+            default:
+                this.runButton.textContent = 'Run Workflow';
+                this.runButton.disabled = false;
+                break;
         }
     }
 
-    setRunState(isRunning) {
-        this.isRunning = isRunning;
-        if (this.runButton) {
-            this.runButton.disabled = isRunning;
-        }
+    appendStatusMessage(text, type = '') {
+        if (!this.chatMessages) return;
+        const message = document.createElement('div');
+        message.className = `chat-message status ${type}`;
+        message.textContent = text;
+        this.chatMessages.appendChild(message);
+        this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
     }
 
     logManualUserMessage(text) {
@@ -322,10 +354,11 @@ export class WorkflowEditor {
             this.render();
             this.addDefaultStartNode();
             this.currentPrompt = '';
+            this.currentRunId = null;
             if (this.chatMessages) {
                 this.chatMessages.innerHTML = '<div class="chat-message system">Canvas cleared. Start building your next workflow.</div>';
             }
-            this.setStatus('Idle');
+            this.setWorkflowState('idle');
         });
         
         if (this.approveBtn) {
@@ -470,12 +503,17 @@ export class WorkflowEditor {
     }
 
     getDefaultStartPosition() {
-        const container = this.canvasStage || this.canvas;
-        const fallback = { x: 160, y: 160 };
+        const container = this.canvas;
+        const fallback = { x: 200, y: 200 };
         if (!container) return fallback;
         const rect = container.getBoundingClientRect();
-        const x = rect.width ? Math.max(60, rect.width * 0.2) : fallback.x;
-        const y = rect.height ? Math.max(60, rect.height * 0.3) : fallback.y;
+        if (!rect.width || !rect.height) return fallback;
+        
+        // Center the node accounting for approximate start node width and height
+        const nodeWidth = 120; // Start node is narrow
+        const nodeHeight = 60;
+        const x = (rect.width / 2) - (nodeWidth / 2);
+        const y = (rect.height / 2) - (nodeHeight / 2);
         return { x, y };
     }
 
@@ -775,16 +813,19 @@ export class WorkflowEditor {
 
             toolItems.forEach(tool => {
                 const row = document.createElement('label');
-                row.className = 'row';
+                row.className = 'tool-item';
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
+                checkbox.className = 'tool-checkbox';
                 checkbox.checked = node.data.tools?.[tool.key] || false;
                 checkbox.addEventListener('change', (e) => {
                     if (!node.data.tools) node.data.tools = {};
                     node.data.tools[tool.key] = e.target.checked;
                 });
                 row.appendChild(checkbox);
-                row.appendChild(document.createTextNode(` ${tool.label}`));
+                const labelText = document.createElement('span');
+                labelText.textContent = tool.label;
+                row.appendChild(labelText);
                 toolsList.appendChild(row);
             });
 
@@ -1169,16 +1210,17 @@ export class WorkflowEditor {
     }
 
     async runWorkflow() {
+        // Don't start new workflow if already running or paused
+        if (this.workflowState !== 'idle') return;
+
         this.upgradeLegacyNodes();
         const startNode = this.nodes.find(n => n.type === 'start');
         if (!startNode) {
             alert('Add a Start node and connect your workflow before running.');
-            this.setStatus('Missing start node');
             return;
         }
 
-        this.setStatus('Running');
-        this.setRunState(true);
+        this.setWorkflowState('running');
 
         this.currentPrompt = this.initialPrompt.value || '';
         this.startChatSession(this.currentPrompt);
@@ -1197,9 +1239,9 @@ export class WorkflowEditor {
 
         } catch (e) {
             this.appendChatMessage('Error: ' + e.message, 'error');
-            this.setStatus('Failed');
+            this.appendStatusMessage('Failed', 'failed');
             this.hideAgentSpinner();
-            this.setRunState(false);
+            this.setWorkflowState('idle');
         }
     }
 
@@ -1212,18 +1254,24 @@ export class WorkflowEditor {
             this.currentRunId = result.runId;
             const pausedNodeId = result.currentNodeId || this.extractWaitingNodeId(result.logs);
             this.showApprovalMessage(pausedNodeId);
-            this.setStatus('Waiting for approval');
+            this.setWorkflowState('paused');
         } else if (result.status === 'completed') {
             this.clearApprovalMessage();
-            this.setStatus('Completed');
+            this.appendStatusMessage('Completed', 'completed');
             this.hideAgentSpinner();
-            this.setRunState(false);
-  } else {
+            this.setWorkflowState('idle');
+            this.currentRunId = null;
+        } else if (result.status === 'failed') {
             this.clearApprovalMessage();
-            this.setStatus(result.status || 'Idle');
+            this.appendStatusMessage('Failed', 'failed');
+            this.hideAgentSpinner();
+            this.setWorkflowState('idle');
+            this.currentRunId = null;
+        } else {
+            this.clearApprovalMessage();
             if (result.status !== 'paused') {
                 this.hideAgentSpinner();
-                this.setRunState(false);
+                this.setWorkflowState('idle');
             }
         }
     }
@@ -1233,7 +1281,7 @@ export class WorkflowEditor {
         this.setApprovalButtonsDisabled(true);
         const note = '';
         this.replaceApprovalWithResult(decision, note);
-        this.setStatus('Running');
+        this.setWorkflowState('running');
         this.showAgentSpinner();
         
         try {
@@ -1241,8 +1289,9 @@ export class WorkflowEditor {
             this.handleRunResult(result);
         } catch (e) {
             this.appendChatMessage(e.message, 'error');
+            this.appendStatusMessage('Failed', 'failed');
             this.hideAgentSpinner();
-            this.setRunState(false);
+            this.setWorkflowState('idle');
         }
     }
 }
