@@ -38,8 +38,8 @@ export class WorkflowEditor {
         this.connectionsLayer = document.getElementById('connections-layer');
         this.chatMessages = document.getElementById('chat-messages');
         this.initialPrompt = document.getElementById('initial-prompt');
-        this.chatStatusEl = document.getElementById('chat-status');
         this.runButton = document.getElementById('btn-run');
+        this.workflowState = 'idle'; // 'idle' | 'running' | 'paused'
         this.rightPanel = document.getElementById('right-panel');
         this.rightResizer = document.getElementById('right-resizer');
         this.pendingAgentMessage = null;
@@ -62,8 +62,7 @@ export class WorkflowEditor {
         this.initWebSocket();
 
         this.applyViewport();
-        this.setStatus('Idle');
-        this.setRunState(false);
+        this.updateRunButton();
         this.addDefaultStartNode();
         this.upgradeLegacyNodes(true);
 
@@ -119,17 +118,38 @@ export class WorkflowEditor {
         return node.data.collapsed ? COLLAPSED_NODE_WIDTH : EXPANDED_NODE_WIDTH;
     }
 
-    setStatus(text) {
-        if (this.chatStatusEl) {
-            this.chatStatusEl.innerText = text;
+    setWorkflowState(state) {
+        this.workflowState = state;
+        this.updateRunButton();
+    }
+
+    updateRunButton() {
+        if (!this.runButton) return;
+        
+        switch (this.workflowState) {
+            case 'running':
+                this.runButton.textContent = 'Running...';
+                this.runButton.disabled = true;
+                break;
+            case 'paused':
+                this.runButton.textContent = 'Resume';
+                this.runButton.disabled = false;
+                break;
+            case 'idle':
+            default:
+                this.runButton.textContent = 'Run Workflow';
+                this.runButton.disabled = false;
+                break;
         }
     }
 
-    setRunState(isRunning) {
-        this.isRunning = isRunning;
-        if (this.runButton) {
-            this.runButton.disabled = isRunning;
-        }
+    appendStatusMessage(text, type = '') {
+        if (!this.chatMessages) return;
+        const message = document.createElement('div');
+        message.className = `chat-message status ${type}`;
+        message.textContent = text;
+        this.chatMessages.appendChild(message);
+        this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
     }
 
     logManualUserMessage(text) {
@@ -322,10 +342,11 @@ export class WorkflowEditor {
             this.render();
             this.addDefaultStartNode();
             this.currentPrompt = '';
+            this.currentRunId = null;
             if (this.chatMessages) {
                 this.chatMessages.innerHTML = '<div class="chat-message system">Canvas cleared. Start building your next workflow.</div>';
             }
-            this.setStatus('Idle');
+            this.setWorkflowState('idle');
         });
         
         if (this.approveBtn) {
@@ -1169,16 +1190,20 @@ export class WorkflowEditor {
     }
 
     async runWorkflow() {
+        // If paused, resume instead
+        if (this.workflowState === 'paused' && this.currentRunId) {
+            this.submitApprovalDecision('approve');
+            return;
+        }
+
         this.upgradeLegacyNodes();
         const startNode = this.nodes.find(n => n.type === 'start');
         if (!startNode) {
             alert('Add a Start node and connect your workflow before running.');
-            this.setStatus('Missing start node');
             return;
         }
 
-        this.setStatus('Running');
-        this.setRunState(true);
+        this.setWorkflowState('running');
 
         this.currentPrompt = this.initialPrompt.value || '';
         this.startChatSession(this.currentPrompt);
@@ -1197,9 +1222,9 @@ export class WorkflowEditor {
 
         } catch (e) {
             this.appendChatMessage('Error: ' + e.message, 'error');
-            this.setStatus('Failed');
+            this.appendStatusMessage('Failed', 'failed');
             this.hideAgentSpinner();
-            this.setRunState(false);
+            this.setWorkflowState('idle');
         }
     }
 
@@ -1212,18 +1237,24 @@ export class WorkflowEditor {
             this.currentRunId = result.runId;
             const pausedNodeId = result.currentNodeId || this.extractWaitingNodeId(result.logs);
             this.showApprovalMessage(pausedNodeId);
-            this.setStatus('Waiting for approval');
+            this.setWorkflowState('paused');
         } else if (result.status === 'completed') {
             this.clearApprovalMessage();
-            this.setStatus('Completed');
+            this.appendStatusMessage('Completed', 'completed');
             this.hideAgentSpinner();
-            this.setRunState(false);
-  } else {
+            this.setWorkflowState('idle');
+            this.currentRunId = null;
+        } else if (result.status === 'failed') {
             this.clearApprovalMessage();
-            this.setStatus(result.status || 'Idle');
+            this.appendStatusMessage('Failed', 'failed');
+            this.hideAgentSpinner();
+            this.setWorkflowState('idle');
+            this.currentRunId = null;
+        } else {
+            this.clearApprovalMessage();
             if (result.status !== 'paused') {
                 this.hideAgentSpinner();
-                this.setRunState(false);
+                this.setWorkflowState('idle');
             }
         }
     }
@@ -1233,7 +1264,7 @@ export class WorkflowEditor {
         this.setApprovalButtonsDisabled(true);
         const note = '';
         this.replaceApprovalWithResult(decision, note);
-        this.setStatus('Running');
+        this.setWorkflowState('running');
         this.showAgentSpinner();
         
         try {
@@ -1241,8 +1272,9 @@ export class WorkflowEditor {
             this.handleRunResult(result);
         } catch (e) {
             this.appendChatMessage(e.message, 'error');
+            this.appendStatusMessage('Failed', 'failed');
             this.hideAgentSpinner();
-            this.setRunState(false);
+            this.setWorkflowState('idle');
         }
     }
 }

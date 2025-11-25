@@ -1,6 +1,5 @@
 :root {
     --node-width: 240px;
-    --header-height: 72px;
     --sidebar-width: 260px;
     --right-sidebar-width: 320px;
 }
@@ -23,28 +22,12 @@ body {
     gap: var(--UI-Spacing-spacing-s);
 }
 
-/* Header tweaks */
-.header {
-    display: flex;
-    align-items: center;
-    gap: var(--UI-Spacing-spacing-ms);
-}
 
-.header-left {
-    display: flex;
-    align-items: center;
-    gap: var(--UI-Spacing-spacing-ms);
-}
-
-.header-help {
-    margin-left: auto;
-}
-
-/* Main Layout Override for 3-column structure */
+/* Main Layout Override for 2-column structure */
 .main-layout {
     display: grid;
     grid-template-columns: 1fr 6px var(--right-sidebar-width);
-    height: calc(100vh - var(--header-height));
+    height: 100vh;
     overflow: hidden;
 }
 
@@ -468,7 +451,7 @@ path.connection-line.active {
 
 /* Right Sidebar - Chat Panel */
 .chat-panel {
-    height: calc(100vh - var(--header-height) - var(--UI-Spacing-spacing-ms));
+    height: calc(100vh - var(--UI-Spacing-spacing-ms));
     display: flex;
     flex-direction: column;
     padding: var(--UI-Spacing-spacing-mxs);
@@ -483,13 +466,6 @@ path.connection-line.active {
 
 .chat-header h2 {
     margin: 0;
-}
-
-.chat-status {
-    font-size: var(--Fonts-Body-Default-xs);
-    font-weight: 600;
-    color: var(--Colors-Text-Body-Medium);
-    text-transform: uppercase;
 }
 .chat-messages {
     flex: 1;
@@ -587,6 +563,27 @@ path.connection-line.active {
     background: transparent;
     color: var(--Colors-Text-Body-Medium);
     font-size: var(--Fonts-Body-Default-xxs);
+}
+
+.chat-message.status {
+    align-self: center;
+    background: var(--Colors-Backgrounds-Main-Medium);
+    color: var(--Colors-Text-Body-Strong);
+    font-size: var(--Fonts-Body-Default-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: var(--UI-Spacing-spacing-s) var(--UI-Spacing-spacing-ms);
+}
+
+.chat-message.status.completed {
+    background: var(--Colors-Alert-Success-Lighter);
+    color: var(--Colors-Alert-Success-Medium-Dark);
+}
+
+.chat-message.status.failed {
+    background: var(--Colors-Alert-Error-Lighter);
+    color: var(--Colors-Alert-Error-Default);
 }
 
 .chat-message.error {
