@@ -491,12 +491,17 @@ export class WorkflowEditor {
     }
 
     getDefaultStartPosition() {
-        const container = this.canvasStage || this.canvas;
-        const fallback = { x: 160, y: 160 };
+        const container = this.canvas;
+        const fallback = { x: 200, y: 200 };
         if (!container) return fallback;
         const rect = container.getBoundingClientRect();
-        const x = rect.width ? Math.max(60, rect.width * 0.2) : fallback.x;
-        const y = rect.height ? Math.max(60, rect.height * 0.3) : fallback.y;
+        if (!rect.width || !rect.height) return fallback;
+        
+        // Center the node accounting for node width (240px) and approximate height (60px)
+        const nodeWidth = COLLAPSED_NODE_WIDTH;
+        const nodeHeight = 60;
+        const x = (rect.width / 2) - (nodeWidth / 2);
+        const y = (rect.height / 2) - (nodeHeight / 2);
         return { x, y };
     }
 
@@ -796,16 +801,19 @@ export class WorkflowEditor {
 
             toolItems.forEach(tool => {
                 const row = document.createElement('label');
-                row.className = 'row';
+                row.className = 'tool-item';
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
+                checkbox.className = 'tool-checkbox';
                 checkbox.checked = node.data.tools?.[tool.key] || false;
                 checkbox.addEventListener('change', (e) => {
                     if (!node.data.tools) node.data.tools = {};
                     node.data.tools[tool.key] = e.target.checked;
                 });
                 row.appendChild(checkbox);
-                row.appendChild(document.createTextNode(` ${tool.label}`));
+                const labelText = document.createElement('span');
+                labelText.textContent = tool.label;
+                row.appendChild(labelText);
                 toolsList.appendChild(row);
             });
 

@@ -448,6 +448,63 @@ path.connection-line.active {
     max-height: 100px;
     overflow-y: auto;
     background: var(--Colors-Backgrounds-Main-Top);
+    display: flex;
+    flex-direction: column;
+    gap: var(--UI-Spacing-spacing-s);
+}
+
+.tool-list .tool-item {
+    display: flex;
+    align-items: center;
+    gap: var(--UI-Spacing-spacing-s);
+    cursor: pointer;
+    font-size: var(--Fonts-Body-Default-sm);
+    color: var(--Colors-Text-Body-Default);
+}
+
+.tool-list .tool-item:hover {
+    color: var(--Colors-Text-Body-Strong);
+}
+
+/* Custom checkbox styling */
+.tool-list .tool-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--Colors-Stroke-Strong);
+    border-radius: var(--UI-Radius-radius-xxs);
+    background: var(--Colors-Backgrounds-Main-Top);
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+    transition: all 0.15s ease;
+}
+
+.tool-list .tool-checkbox:hover {
+    border-color: var(--Colors-Primary-Medium);
+}
+
+.tool-list .tool-checkbox:checked {
+    background: var(--Colors-Primary-Default);
+    border-color: var(--Colors-Primary-Default);
+}
+
+.tool-list .tool-checkbox:checked::after {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 2px;
+    width: 4px;
+    height: 8px;
+    border: solid var(--Colors-Text-Body-White);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+.tool-list .tool-checkbox:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--Colors-Primary-Lightest);
 }
 
 /* Right Sidebar - Chat Panel */
