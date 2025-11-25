@@ -4,8 +4,8 @@
 import type { WorkflowGraph } from '@agentic/types';
 import { runWorkflow, resumeWorkflow } from '../services/api';
 
-const COLLAPSED_NODE_WIDTH = 240;
 const EXPANDED_NODE_WIDTH = 420;
+const DEFAULT_NODE_WIDTH = 150; // Fallback if DOM not ready
 const MODEL_OPTIONS = ['gpt-5', 'gpt-5-mini', 'gpt-5.1'];
 const MODEL_EFFORTS = {
     'gpt-5': ['low', 'medium', 'high'],
@@ -114,8 +114,20 @@ export class WorkflowEditor {
     }
 
     getNodeWidth(node) {
-        if (!node || !node.data) return COLLAPSED_NODE_WIDTH;
-        return node.data.collapsed ? COLLAPSED_NODE_WIDTH : EXPANDED_NODE_WIDTH;
+        if (!node) return DEFAULT_NODE_WIDTH;
+        
+        // If expanded, use fixed expanded width
+        if (node.data && !node.data.collapsed) {
+            return EXPANDED_NODE_WIDTH;
+        }
+        
+        // Try to get actual width from DOM
+        const el = document.getElementById(node.id);
+        if (el) {
+            return el.offsetWidth || DEFAULT_NODE_WIDTH;
+        }
+        
+        return DEFAULT_NODE_WIDTH;
     }
 
     setWorkflowState(state) {
@@ -497,8 +509,8 @@ export class WorkflowEditor {
         const rect = container.getBoundingClientRect();
         if (!rect.width || !rect.height) return fallback;
         
-        // Center the node accounting for node width (240px) and approximate height (60px)
-        const nodeWidth = COLLAPSED_NODE_WIDTH;
+        // Center the node accounting for approximate start node width and height
+        const nodeWidth = 120; // Start node is narrow
         const nodeHeight = 60;
         const x = (rect.width / 2) - (nodeWidth / 2);
         const y = (rect.height / 2) - (nodeHeight / 2);

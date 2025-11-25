@@ -1,5 +1,7 @@
 :root {
-    --node-width: 240px;
+    --node-width-min: 120px;
+    --node-width-max: 280px;
+    --node-width-expanded: 420px;
     --sidebar-width: 260px;
     --right-sidebar-width: 320px;
 }
@@ -246,9 +248,11 @@ path.connection-line.active {
 /* Nodes on Canvas */
 .node {
     position: absolute;
-    width: var(--node-width);
+    width: auto;
+    min-width: var(--node-width-min);
+    max-width: var(--node-width-max);
     z-index: 2;
-    transition: box-shadow 0.2s, width 0.2s;
+    transition: box-shadow 0.2s, width 0.2s, min-width 0.2s, max-width 0.2s;
     flex-direction: column;
     justify-content: flex-start;
     align-items: stretch;
@@ -268,7 +272,9 @@ path.connection-line.active {
 
 /* Expanded Mode (In-Node Editing) */
 .node.expanded {
-    width: 420px; /* Wider for editing */
+    width: var(--node-width-expanded);
+    min-width: var(--node-width-expanded);
+    max-width: var(--node-width-expanded);
     z-index: 100;
 }
 
@@ -282,11 +288,21 @@ path.connection-line.active {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: var(--UI-Spacing-spacing-s);
+}
+
+.node-header > span:first-child {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .node-header .icon {
     margin-right: var(--UI-Spacing-spacing-xs);
     vertical-align: middle;
+    flex-shrink: 0;
 }
 
 .node-header:active {
@@ -296,6 +312,7 @@ path.connection-line.active {
 .node-controls {
     display: flex;
     gap: var(--UI-Spacing-spacing-s);
+    flex-shrink: 0;
 }
 
 .icon-btn {
@@ -344,12 +361,13 @@ path.connection-line.active {
 }
 
 .node-preview {
-    padding: var(--UI-Spacing-spacing-ms);
-    font-size: var(--Fonts-Body-Default-sm);
+    padding: var(--UI-Spacing-spacing-mxs) var(--UI-Spacing-spacing-ms);
+    font-size: var(--Fonts-Body-Default-xs);
     color: var(--Colors-Text-Body-Medium);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    max-width: calc(var(--node-width-max) - var(--UI-Spacing-spacing-ms) * 2);
 }
 
 .node.expanded .node-preview {
